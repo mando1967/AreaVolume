@@ -168,7 +168,29 @@ def plot_rotated_curves(x, y1, z1, y2, z2, angle_interval=15):
         y2_rot, z2_rot = rotated_points2
         mlab.plot3d(x, y2_rot, z2_rot, color=(1, 0, 0), tube_radius=0.005, opacity=0.5)
 
-def plot_single_function(f, x_range, show_disk_pos, color, name):
+def get_global_ranges(x_range):
+    """Calculate global ranges for consistent axes across all plots"""
+    x_plot = np.linspace(x_range[0], x_range[1], 100)
+    y1_plot = f1(x_plot)
+    y2_plot = f2(x_plot)
+    
+    # Calculate global y range
+    y_min = min(min(y1_plot), min(y2_plot))
+    y_max = max(max(y1_plot), max(y2_plot))
+    y_range = y_max - y_min
+    y_extension = y_range * 0.25
+    
+    # Global ranges
+    y_min_ext = y_min - y_extension
+    y_max_ext = y_max + y_extension
+    
+    # Z range should match Y range for proper circular rotation
+    z_max = max(abs(y_max_ext), abs(y_min_ext))
+    z_min = -z_max
+    
+    return y_min_ext, y_max_ext, z_min, z_max
+
+def plot_single_function(f, x_range, show_disk_pos, color, name, x_offset=0, global_ranges=None):
     """
     Plot a single function with its volumetric rotation
     Args:
@@ -177,25 +199,29 @@ def plot_single_function(f, x_range, show_disk_pos, color, name):
         show_disk_pos: x position for disk
         color: Color tuple (r,g,b) for the function
         name: Name for the axis label
+        x_offset: Offset in x direction for positioning
+        global_ranges: Tuple of (y_min, y_max, z_min, z_max) for consistent axes
     """
     x_plot = np.linspace(x_range[0], x_range[1], 100)
     y_plot = f(x_plot)
     
-    # Create points for rotation around x-axis
-    theta = np.linspace(0, 2*np.pi, 50)
-    X, Y = np.meshgrid(x_plot, y_plot)
-    Z = np.zeros_like(X)
+    # Use global ranges if provided
+    if global_ranges:
+        y_min_ext, y_max_ext, z_min, z_max = global_ranges
+    else:
+        # Calculate local ranges (fallback)
+        y_range = max(y_plot) - min(y_plot)
+        y_extension = y_range * 0.25
+        y_min_ext = min(y_plot) - y_extension
+        y_max_ext = max(y_plot) + y_extension
+        z_max = max(abs(y_max_ext), abs(y_min_ext))
+        z_min = -z_max
     
-    # Calculate axis ranges
-    y_range = max(y_plot) - min(y_plot)
-    y_extension_pos = y_range * 0.25
-    y_extension_neg = y_range * 0.25
-    y_min_ext = min(y_plot) - y_extension_neg
-    y_max_ext = max(y_plot) + y_extension_pos
-    
-    z_max = max(abs(max(y_plot)), abs(min(y_plot)))
-    z_extension = z_max * 0.15
-    z_min, z_max = -(z_max + z_extension), (z_max + z_extension)
+    # Create points for the surface - only back half
+    theta = np.linspace(np.pi, 2*np.pi, 25)  # Half the points for back half rotation
+    X, Theta = np.meshgrid(x_plot, theta)
+    Y = np.outer(np.cos(theta), y_plot)
+    Z = np.outer(np.sin(theta), y_plot)
     
     # Create axes
     axis_points_x = np.linspace(x_range[0], x_range[1], 50)
@@ -204,188 +230,268 @@ def plot_single_function(f, x_range, show_disk_pos, color, name):
     zeros = np.zeros_like(axis_points_x)
     
     # Draw axes
-    mlab.plot3d(axis_points_x, zeros, zeros, color=(1, 0, 0), tube_radius=0.01, line_width=2)
-    mlab.text3d(x_range[1] + 0.2, 0, 0, 'x', color=(1, 0, 0), scale=0.3)
-    mlab.plot3d(zeros, axis_points_y, zeros, color=(0, 0, 0), tube_radius=0.01, line_width=2)
-    mlab.text3d(0, y_max_ext + 0.2, 0, name, color=color, scale=0.3)
-    mlab.plot3d(zeros, zeros, axis_points_z, color=(0, 0, 1), tube_radius=0.01, line_width=2)
-    mlab.text3d(0, 0, z_max + 0.2, 'z', color=(0, 0, 1), scale=0.3)
+    mlab.plot3d(axis_points_x + x_offset, zeros, zeros, color=(1, 0, 0), tube_radius=0.01, line_width=2)
+    mlab.text3d(x_range[1] + x_offset + 0.2, 0, 0, 'x', color=(1, 0, 0), scale=0.3)
+    mlab.plot3d([x_offset]*len(axis_points_y), axis_points_y, zeros[0:len(axis_points_y)], color=(0, 0, 0), tube_radius=0.01, line_width=2)
+    mlab.text3d(x_offset, y_max_ext + 0.2, 0, name, color=color, scale=0.3)
+    mlab.plot3d([x_offset]*len(axis_points_z), zeros[0:len(axis_points_z)], axis_points_z, color=(0, 0, 1), tube_radius=0.01, line_width=2)
+    mlab.text3d(x_offset, 0, z_max + 0.2, 'z', color=(0, 0, 1), scale=0.3)
     
-    # Create rotational surface
-    for angle in range(0, 360, 15):
-        theta = np.radians(angle)
-        Y_rot = y_plot * np.cos(theta)
-        Z_rot = y_plot * np.sin(theta)
-        mlab.mesh(X[0:1,:], Y_rot.reshape(1,-1), Z_rot.reshape(1,-1), color=color, opacity=0.1)
+    # Add ticks and labels
+    for x in np.arange(int(x_range[0]), int(x_range[1]) + 1):
+        if x != 0:
+            mlab.plot3d([x + x_offset, x + x_offset], [0, -0.1], [0, 0], color=(1, 0, 0), tube_radius=0.005)
+            mlab.text3d(x + x_offset, -0.3, 0, f'{int(x)}', color=(1, 0, 0), scale=0.2)
+    
+    for y in np.arange(int(y_min_ext), int(y_max_ext) + 1):
+        if y != 0:
+            mlab.plot3d([x_offset - 0.1, x_offset], [y, y], [0, 0], color=(0, 0, 0), tube_radius=0.005)
+            mlab.text3d(x_offset - 0.3, y, 0, f'{int(y)}', color=(0, 0, 0), scale=0.2)
+    
+    for z in np.arange(int(z_min), int(z_max) + 1):
+        if z != 0:
+            mlab.plot3d([x_offset - 0.1, x_offset], [0, 0], [z, z], color=(0, 0, 1), tube_radius=0.005)
+    
+    # Plot the volume surface
+    mlab.mesh(X + x_offset, Y, Z, color=color, opacity=0.4)
+    
+    # Plot intersection with x/y plane
+    mlab.plot3d(x_plot + x_offset, y_plot, np.zeros_like(x_plot), color=color, tube_radius=0.04, line_width=2)
     
     # Plot base curve
-    mlab.plot3d(x_plot, y_plot, np.zeros_like(x_plot), color=color, tube_radius=0.04, line_width=2)
+    mlab.plot3d(x_plot + x_offset, y_plot, np.zeros_like(x_plot), color=color, tube_radius=0.04, line_width=2)
     
     # Show disk if position specified
     if show_disk_pos is not None:
         y_val = f(show_disk_pos)
-        create_disk_or_washer(show_disk_pos, y_val, 0, method='disk', thickness=0.2, offset_disks=False)
+        create_disk_or_washer(show_disk_pos + x_offset, y_val, 0, method='disk', thickness=0.4, offset_disks=False)
     
-    # Plot rotated curves
-    angle_interval = 15
-    for angle in range(0, 360, angle_interval):
-        theta = np.radians(angle)
-        y_rot = y_plot * np.cos(theta)
-        z_rot = y_plot * np.sin(theta)
-        mlab.plot3d(x_plot, y_rot, z_rot, color=color, tube_radius=0.005)
-
+    # Add grid planes
+    grid_color = (0.2, 0.2, 0.2)
+    x_grid, y_grid = np.mgrid[x_range[0]:x_range[1]:20j, y_min_ext:y_max_ext:20j]
+    z_grid = np.zeros_like(x_grid)
+    mlab.mesh(x_grid + x_offset, y_grid, z_grid, color=grid_color, opacity=0.05)
 
 def plot_volumetric_figure(method='washer', show_disk_pos=None, offset_disks=False, show_curves=True, 
-                         angle_interval=15, base_curve_radius=0.04, x_offset=0):
+                         angle_interval=15, base_curve_radius=0.08, x_offset=0):
     """
-    Plot the volumetric figure with optional disk/washer visualization
+    Plot the volumetric figure using either washer or shell method
     Args:
         method: 'disk', 'washer', or 'separate_disks'
-        show_disk_pos: x position where to show the disk/washer, or None to hide
+        show_disk_pos: x position for disk
         offset_disks: If True, offset the disks in x-axis for better visibility
         show_curves: If True, show the rotated function curves
         angle_interval: Angle interval in degrees between curves
         base_curve_radius: Thickness of the curves in the x/y plane
         x_offset: Offset in x direction for positioning
     """
-    # Create figure with white background
-    fig = mlab.figure(bgcolor=(1, 1, 1), size=(1200, 800))
-    
     # Find intersection points
     x1, x2 = find_intersection()
+    x_range = x2 - x1
+    x_extension = x_range * 0.35  # Increased from 0.25 to 0.35 (10% more)
+    x_min = x1 - x_extension
+    x_max = x2 + x_extension
     
-    # Calculate points around intersection
-    x_margin = (x2 - x1) * 0.25  # 25% margin
-    x_plot = np.linspace(x1 - x_margin, x2 + x_margin, 100)
+    # Create points for plotting
+    x_plot = np.linspace(x_min, x_max, 100)
     y1_plot = f1(x_plot)
     y2_plot = f2(x_plot)
     
-    # Points for rotation volume
+    # Calculate axis ranges
+    y_min = min(min(y1_plot), min(y2_plot))
+    y_max = max(max(y1_plot), max(y2_plot))
+    y_range = y_max - y_min
+    y_extension = y_range * 0.25
+    y_min_ext = y_min - y_extension
+    y_max_ext = y_max + y_extension
+    
+    z_max = max(abs(y_max_ext), abs(y_min_ext))
+    z_min = -z_max
+    
+    # Create points for the volume surface
     x_fill = np.linspace(x1, x2, 100)
     y1_fill = f1(x_fill)
     y2_fill = f2(x_fill)
     
-    # Create points for rotation around x-axis
+    # Create rotation points
     X, Y1, Z1, Y2, Z2 = create_rotation_points(x_fill, y1_fill, y2_fill)
     
-    # Calculate axis ranges with 25% extension
-    x_range = x2 - x1
-    y_values = np.concatenate([y1_plot, y2_plot])
-    y_min, y_max = y_values.min(), y_values.max()
-    y_range = y_max - y_min
-    
-    # Calculate extensions
-    x_extension = x_range * 0.25
-    y_extension_pos = y_range * 0.25  # 25% extension for positive direction
-    y_extension_neg = y_range * 0.25  # 25% extension for negative direction
-    
-    # Apply extensions to ranges
-    x_min, x_max = x1 - x_extension, x2 + x_extension
-    y_min_ext = y_min - y_extension_neg
-    y_max_ext = y_max + y_extension_pos
-    
-    # For z-axis, use a shorter range than y
-    z_max = max(abs(y_max), abs(y_min))  # Use original y values, not extended
-    z_extension = z_max * 0.15  # 15% extension for z-axis
-    z_min, z_max = -(z_max + z_extension), (z_max + z_extension)
-    
-    # Create custom axes with extended ranges
-    axis_points_x = np.linspace(x_min, x_max, 50) + x_offset
+    # Create axes
+    axis_points_x = np.linspace(x_min, x_max, 50)
     axis_points_y = np.linspace(y_min_ext, y_max_ext, 50)
     axis_points_z = np.linspace(z_min, z_max, 50)
     zeros = np.zeros_like(axis_points_x)
     
-    # Draw X axis (red)
-    mlab.plot3d(axis_points_x, zeros, zeros, color=(1, 0, 0), tube_radius=0.01, line_width=2)
+    # Draw axes
+    mlab.plot3d(axis_points_x + x_offset, zeros, zeros, color=(1, 0, 0), tube_radius=0.01, line_width=2)
     mlab.text3d(x_max + x_offset + 0.2, 0, 0, 'x', color=(1, 0, 0), scale=0.3)
-    # X-axis ticks and labels
+    mlab.plot3d([x_offset]*len(axis_points_y), axis_points_y, zeros[0:len(axis_points_y)], color=(0, 0, 0), tube_radius=0.01, line_width=2)
+    mlab.text3d(x_offset, y_max_ext + 0.2, 0, 'y', color=(0, 0, 0), scale=0.3)
+    mlab.plot3d([x_offset]*len(axis_points_z), zeros[0:len(axis_points_z)], axis_points_z, color=(0, 0, 1), tube_radius=0.01, line_width=2)
+    mlab.text3d(x_offset, 0, z_max + 0.2, 'z', color=(0, 0, 1), scale=0.3)
+    
+    # Add ticks and labels
     for x in np.arange(int(x_min), int(x_max) + 1):
-        if x != 0:  # Skip 0 to avoid cluttering the origin
+        if x != 0:
             mlab.plot3d([x + x_offset, x + x_offset], [0, -0.1], [0, 0], color=(1, 0, 0), tube_radius=0.005)
             mlab.text3d(x + x_offset, -0.3, 0, f'{int(x)}', color=(1, 0, 0), scale=0.2)
     
-    # Draw Y axis (black)
-    mlab.plot3d([x_offset]*len(axis_points_y), axis_points_y, zeros[0:len(axis_points_y)], color=(0, 0, 0), tube_radius=0.01, line_width=2)
-    mlab.text3d(x_offset, y_max_ext + 0.2, 0, 'y', color=(0, 0, 0), scale=0.3)
-    # Y-axis ticks and labels
     for y in np.arange(int(y_min_ext), int(y_max_ext) + 1):
-        if y != 0:  # Skip 0 to avoid cluttering the origin
+        if y != 0:
             mlab.plot3d([x_offset - 0.1, x_offset], [y, y], [0, 0], color=(0, 0, 0), tube_radius=0.005)
             mlab.text3d(x_offset - 0.3, y, 0, f'{int(y)}', color=(0, 0, 0), scale=0.2)
     
-    # Draw Z axis (blue)
-    mlab.plot3d([x_offset]*len(axis_points_z), zeros[0:len(axis_points_z)], axis_points_z, color=(0, 0, 1), tube_radius=0.01, line_width=2)
-    mlab.text3d(x_offset, 0, z_max + 0.2, 'z', color=(0, 0, 1), scale=0.3)
-    # Z-axis ticks only (no labels)
     for z in np.arange(int(z_min), int(z_max) + 1):
-        if z != 0:  # Skip 0 to avoid cluttering the origin
+        if z != 0:
             mlab.plot3d([x_offset - 0.1, x_offset], [0, 0], [z, z], color=(0, 0, 1), tube_radius=0.005)
+            mlab.text3d(x_offset - 0.3, 0, z, f'{int(z)}', color=(0, 0, 1), scale=0.2)
     
-    # Plot surfaces
-    surf1 = mlab.mesh(X + x_offset, Y1, Z1, color=(0, 0, 1), opacity=0.1)
-    surf2 = mlab.mesh(X + x_offset, Y2, Z2, color=(1, 0, 0), opacity=0.1)
+    # Set volume color
+    volume_color = (0.7, 0.7, 0)  # Yellow-gold color
     
-    # Plot the base curves in the x/y plane
-    mlab.plot3d(x_plot + x_offset, y1_plot, np.zeros_like(x_plot), color=(0, 0, 1), tube_radius=base_curve_radius, line_width=2)
-    mlab.plot3d(x_plot + x_offset, y2_plot, np.zeros_like(x_plot), color=(1, 0, 0), tube_radius=base_curve_radius, line_width=2)
+    # For the bounded region, use the difference between the two functions
+    if method == 'washer':
+        # Calculate where f2 > f1
+        mask = y2_fill > y1_fill
+        
+        if np.any(mask):
+            # Get x values and function values only where f2 > f1
+            x_masked = x_fill[mask]
+            y1_masked = y1_fill[mask]
+            y2_masked = y2_fill[mask]
+            
+            # Create points for the surface - only back half for visibility
+            theta = np.linspace(np.pi, 2*np.pi, 25)  # Half the points for back half rotation
+            
+            # Create meshgrids for outer surface (f2)
+            X_outer, Theta_outer = np.meshgrid(x_masked, theta)
+            Y_outer = np.outer(np.cos(theta), y2_masked)
+            Z_outer = np.outer(np.sin(theta), y2_masked)
+            
+            # Create meshgrids for inner surface (f1)
+            X_inner, Theta_inner = np.meshgrid(x_masked, theta)
+            Y_inner = np.outer(np.cos(theta), y1_masked)
+            Z_inner = np.outer(np.sin(theta), y1_masked)
+            
+            # Plot the outer and inner surfaces
+            mlab.mesh(X_outer + x_offset, Y_outer, Z_outer, color=volume_color, opacity=0.7)
+            mlab.mesh(X_inner + x_offset, Y_inner, Z_inner, color=volume_color, opacity=0.7)
+            
+            # Create end caps at the start and end x positions
+            for x in [x_masked[0], x_masked[-1]]:
+                # Get the y values at this x position
+                idx = np.where(x_masked == x)[0][0]
+                r_outer = y2_masked[idx]
+                r_inner = y1_masked[idx]
+                
+                # Create circular end cap
+                theta_cap = np.linspace(0, 2*np.pi, 50)
+                r_points = np.linspace(r_inner, r_outer, 10)
+                theta_mesh, r_mesh = np.meshgrid(theta_cap, r_points)
+                
+                x_mesh = x * np.ones_like(theta_mesh)
+                y_mesh = r_mesh * np.cos(theta_mesh)
+                z_mesh = r_mesh * np.sin(theta_mesh)
+                
+                mlab.mesh(x_mesh + x_offset, y_mesh, z_mesh, color=volume_color, opacity=0.7)
+            
+            # Add darker region at intersection with x/y plane
+            # Create filled cross-section
+            theta_cross = np.linspace(0, 2*np.pi, 50)
+            x_cross = np.repeat(x_masked[:, np.newaxis], len(theta_cross), axis=1)
+            r_outer_cross = np.abs(y2_masked[:, np.newaxis]) * np.ones_like(theta_cross)
+            r_inner_cross = np.abs(y1_masked[:, np.newaxis]) * np.ones_like(theta_cross)
+            
+            # Create points for outer and inner boundaries
+            y_outer_cross = r_outer_cross * np.cos(theta_cross)
+            y_inner_cross = r_inner_cross * np.cos(theta_cross)
+            z_cross = np.zeros_like(x_cross)
+            
+            # Plot filled cross-sections
+            mlab.mesh(x_cross + x_offset, y_outer_cross, z_cross, color=volume_color, opacity=0.8)
+            mlab.mesh(x_cross + x_offset, y_inner_cross, z_cross, color=volume_color, opacity=0.8)
     
-    # Plot rotated curves if requested
-    if show_curves:
-        plot_rotated_curves(X[0,:], Y1[0,:], Z1[0,:], Y2[0,:], Z2[0,:], angle_interval)
+    else:
+        mlab.mesh(X + x_offset, Y1, Z1, color=volume_color, opacity=0.4)
+        mlab.mesh(X + x_offset, Y2, Z2, color=volume_color, opacity=0.4)
     
-    # Add grid planes with darker color
-    grid_color = (0.2, 0.2, 0.2)
+    # Plot the base curves in their original colors with doubled thickness
+    mlab.plot3d(x_plot + x_offset, y1_plot, np.zeros_like(x_plot), color=(0, 0, 1), tube_radius=base_curve_radius, line_width=4)
+    mlab.plot3d(x_plot + x_offset, y2_plot, np.zeros_like(x_plot), color=(1, 0, 0), tube_radius=base_curve_radius, line_width=4)
     
-    # Create grid on XY plane (z=0)
-    x_grid, y_grid = np.mgrid[x_min:x_max:20j, y_min_ext:y_max_ext:20j]
-    z_grid = np.zeros_like(x_grid)
-    mlab.mesh(x_grid + x_offset, y_grid, z_grid, color=grid_color, opacity=0.1)
+    # Add rotated curves every 15 degrees
+    if method == 'washer':
+        angles = np.arange(15, 360, angle_interval)  # Every 15 degrees
+        for angle in angles:
+            theta = np.radians(angle)
+            # Rotate f1
+            y_rot = y1_plot * np.cos(theta)
+            z_rot = y1_plot * np.sin(theta)
+            mlab.plot3d(x_plot + x_offset, y_rot, z_rot, color=(0, 0, 1), tube_radius=base_curve_radius/4, line_width=1)
+            
+            # Rotate f2
+            y_rot = y2_plot * np.cos(theta)
+            z_rot = y2_plot * np.sin(theta)
+            mlab.plot3d(x_plot + x_offset, y_rot, z_rot, color=(1, 0, 0), tube_radius=base_curve_radius/4, line_width=1)
     
     # Show disk/washer if position is specified
     if show_disk_pos is not None:
-        f1_val = f1(show_disk_pos)
-        f2_val = f2(show_disk_pos)
-        # Create disk or washer
-        create_disk_or_washer(show_disk_pos + x_offset, f1_val, f2_val, method=method, thickness=0.2, offset_disks=offset_disks)
+        y1_val = f1(show_disk_pos)
+        y2_val = f2(show_disk_pos)
+        if method == 'washer':
+            create_disk_or_washer(show_disk_pos + x_offset, y1_val, y2_val, method=method, thickness=0.4, offset_disks=offset_disks)
+        else:
+            create_disk_or_washer(show_disk_pos + x_offset, y1_val, 0, method='disk', thickness=0.4, offset_disks=offset_disks)
     
-    # Set the view to face x/y plane and rotate 90 degrees to the right
-    mlab.view(azimuth=90, elevation=90, distance='auto', roll=0)
-    
-    # Show the plot
-    mlab.show()
+    # Add grid planes
+    grid_color = (0.2, 0.2, 0.2)
+    x_grid, y_grid = np.mgrid[x_min:x_max:20j, y_min_ext:y_max_ext:20j]
+    z_grid = np.zeros_like(x_grid)
+    mlab.mesh(x_grid + x_offset, y_grid, z_grid, color=grid_color, opacity=0.05)
 
 def plot_volumetric_figures():
     """Create three plots showing individual functions and combined volume"""
     # Find intersection points
     x1, x2 = find_intersection()
     x_range = x2 - x1
-    x_extension = x_range * 0.25
+    x_extension = x_range * 0.35  # Increased from 0.25 to 0.35 (10% more)
     plot_x_range = (x1 - x_extension, x2 + x_extension)
     
+    # Calculate global ranges for consistent axes
+    global_ranges = get_global_ranges(plot_x_range)
+    
+    # Calculate offset based on x range
+    plot_width = plot_x_range[1] - plot_x_range[0]
+    offset = plot_width * 4.0  # Increased from 3.0 to 4.0 for more spacing
+    
     # Create a single figure with white background
-    #fig = mlab.figure(bgcolor=(1, 1, 1), size=(1200, 800))
+    fig = mlab.figure(bgcolor=(1, 1, 1), size=(1800, 800))
     
-    # Plot first function
-    #plot_single_function(f1, plot_x_range, 1.5, (0, 0, 1), 'f1')
-    #mlab.view(azimuth=90, elevation=90, distance='auto', roll=0)
-    #mlab.show()
+    # Determine function order based on maximum values
+    x_test = np.linspace(plot_x_range[0], plot_x_range[1], 100)
+    f1_max = max(f1(x_test))
+    f2_max = max(f2(x_test))
     
-    # Clear the previous figure
-    #mlab.close(all=True)
+    # First function should be the one with higher values
+    if f1_max > f2_max:
+        first_func, second_func = f1, f2
+        first_color, second_color = (0, 0, 1), (1, 0, 0)
+        first_name, second_name = 'f1', 'f2'
+    else:
+        first_func, second_func = f2, f1
+        first_color, second_color = (1, 0, 0), (0, 0, 1)
+        first_name, second_name = 'f2', 'f1'
     
-    # Create new figure for second function
-    #fig = mlab.figure(bgcolor=(1, 1, 1), size=(1200, 800))
-    #plot_single_function(f2, plot_x_range, 1.5, (1, 0, 0), 'f2')
-    #mlab.view(azimuth=90, elevation=90, distance='auto', roll=0)
-    #mlab.show()
+    # Plot functions in determined order with global ranges
+    plot_single_function(first_func, plot_x_range, 1.5, first_color, first_name, x_offset=-offset, global_ranges=global_ranges)
+    plot_single_function(second_func, plot_x_range, 1.5, second_color, second_name, x_offset=0, global_ranges=global_ranges)
     
-    # Clear the previous figure
-    #mlab.close(all=True)
+    # Plot combined volume (rightmost)
+    plot_volumetric_figure(method='washer', show_disk_pos=1.5, offset_disks=False, show_curves=True, x_offset=offset)
     
-    # Create new figure for combined volume
-    #fig = mlab.figure(bgcolor=(1, 1, 1), size=(1200, 800))
-    plot_volumetric_figure(method='washer', show_disk_pos=1.5, offset_disks=False, show_curves=True)
+    # Set initial view to match the image
+    mlab.view(azimuth=45, elevation=45, distance='auto', roll=0)
     mlab.show()
-    
+
 if __name__ == '__main__':
     plot_volumetric_figures()
