@@ -267,6 +267,41 @@ def plot_single_function(f, x_range, show_disk_pos, color, name, x_offset=0, glo
     # Plot base curve
     mlab.plot3d(x_plot + x_offset, y_plot, np.zeros_like(x_plot), color=color, tube_radius=0.04, line_width=2)
     
+    # Create custom axes for the third plot
+    if x_offset > 0:
+        # Draw axes lines only
+        axis_points_x = np.linspace(x_range[0], x_range[1], 50)
+        axis_points_y = np.linspace(y_min_ext, y_max_ext, 50)
+        axis_points_z = np.linspace(z_min, z_max, 50)
+        zeros = np.zeros_like(axis_points_x)
+        
+        # Draw x-axis
+        mlab.plot3d(axis_points_x + x_offset, zeros, zeros, color=(1, 0, 0), tube_radius=0.01, line_width=2)
+        mlab.text3d(x_range[1] + x_offset + 0.2, 0, 0, 'x', color=(1, 0, 0), scale=0.3)
+        
+        # Draw y-axis
+        mlab.plot3d([x_offset]*len(axis_points_y), axis_points_y, zeros[0:len(axis_points_y)], color=(0, 0, 0), tube_radius=0.01, line_width=2)
+        mlab.text3d(x_offset, y_max_ext + 0.2, 0, 'y', color=(0, 0, 0), scale=0.3)
+        
+        # Draw z-axis (no labels)
+        mlab.plot3d([x_offset]*len(axis_points_z), zeros[0:len(axis_points_z)], axis_points_z, color=(0, 0, 1), tube_radius=0.01, line_width=2)
+        
+        # Add ticks for x and y axes only
+        for x in np.arange(int(x_range[0]), int(x_range[1]) + 1):
+            if x != 0:
+                mlab.plot3d([x + x_offset, x + x_offset], [0, -0.1], [0, 0], color=(1, 0, 0), tube_radius=0.005)
+                mlab.text3d(x + x_offset, -0.3, 0, f'{int(x)}', color=(1, 0, 0), scale=0.2)
+        
+        for y in np.arange(int(y_min_ext), int(y_max_ext) + 1):
+            if y != 0:
+                mlab.plot3d([x_offset - 0.1, x_offset], [y, y], [0, 0], color=(0, 0, 0), tube_radius=0.005)
+                mlab.text3d(x_offset - 0.3, y, 0, f'{int(y)}', color=(0, 0, 0), scale=0.2)
+        
+        # Add tick marks for z-axis (no labels)
+        for z in np.arange(int(z_min), int(z_max) + 1):
+            if z != 0:
+                mlab.plot3d([x_offset - 0.1, x_offset], [0, 0], [z, z], color=(0, 0, 1), tube_radius=0.005)
+    
     # Show disk if position specified
     if show_disk_pos is not None:
         y_val = f(show_disk_pos)
@@ -350,7 +385,7 @@ def plot_volumetric_figure(method='washer', show_disk_pos=None, offset_disks=Fal
     mlab.plot3d([x_offset]*len(axis_points_z), zeros[0:len(axis_points_z)], axis_points_z, color=(0, 0, 1), tube_radius=0.01, line_width=2)
     mlab.text3d(x_offset, 0, z_max + 0.2, 'z', color=(0, 0, 1), scale=0.3)
     
-    # Add ticks and labels
+    # Add ticks and labels for x and y only
     for x in np.arange(int(x_min), int(x_max) + 1):
         if x != 0:
             mlab.plot3d([x + x_offset, x + x_offset], [0, -0.1], [0, 0], color=(1, 0, 0), tube_radius=0.005)
@@ -361,10 +396,10 @@ def plot_volumetric_figure(method='washer', show_disk_pos=None, offset_disks=Fal
             mlab.plot3d([x_offset - 0.1, x_offset], [y, y], [0, 0], color=(0, 0, 0), tube_radius=0.005)
             mlab.text3d(x_offset - 0.3, y, 0, f'{int(y)}', color=(0, 0, 0), scale=0.2)
     
+    # Add tick marks for z-axis but no labels
     for z in np.arange(int(z_min), int(z_max) + 1):
         if z != 0:
             mlab.plot3d([x_offset - 0.1, x_offset], [0, 0], [z, z], color=(0, 0, 1), tube_radius=0.005)
-            mlab.text3d(x_offset - 0.3, 0, z, f'{int(z)}', color=(0, 0, 1), scale=0.2)
     
     # Set volume color
     volume_color = (0, 0.7, 0)  # Green color
@@ -500,11 +535,6 @@ def plot_volumetric_figure(method='washer', show_disk_pos=None, offset_disks=Fal
         Z_inner_front = np.outer(np.sin(theta_front), y2_fill)
         vol_front_inner = mlab.mesh(X_inner_front + x_offset, Y_inner_front, Z_inner_front, color=volume_color, opacity=0.08)
     
-    # Remove built-in axes and create custom axes for the third plot
-    if x_offset > 0:  # This is the third plot
-        # Create axes without z labels
-        mlab.orientation_axes()  # This will create minimal axes without labels
-    
     # Show disk/washer if position is specified
     if show_disk_pos is not None:
         y1_val = f1(show_disk_pos)
@@ -552,6 +582,7 @@ def plot_volumetric_figures():
     
     # Set initial view to match the image
     mlab.view(azimuth=45, elevation=45, distance='auto', roll=0)
+    
     mlab.show()
 
 def determine_higher_function(f1, f2, x_range, criteria='area'):
