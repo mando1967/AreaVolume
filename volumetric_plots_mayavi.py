@@ -1,6 +1,7 @@
 import numpy as np
-from scipy.optimize import fsolve
 from mayavi import mlab
+from scipy.optimize import fsolve
+from tvtk.api import tvtk
 
 def f1(x):
     """First function: parabola"""
@@ -38,7 +39,7 @@ def create_rotation_points(x, y1, y2):
     
     return X, Y1, Z1, Y2, Z2
 
-def create_disk_or_washer(x_pos, f1_val, f2_val=None, method='washer', num_points=100, thickness=0.2, offset_disks=False):
+def create_disk_or_washer(x_pos, f1_val, f2_val=None, method='washer', num_points=100, thickness=0.2, offset_disks=False, volume_color=(0, 1, 0)):
     """
     Create a disk or washer at specified x position.
     Args:
@@ -49,6 +50,7 @@ def create_disk_or_washer(x_pos, f1_val, f2_val=None, method='washer', num_point
         num_points: Number of points for circle discretization
         thickness: Thickness of the disk/washer along x-axis
         offset_disks: If True, offset the disks in x-axis for better visibility
+        volume_color: Color of the volume
     """
     theta = np.linspace(0, 2*np.pi, num_points)
     x_left = x_pos - thickness/2
@@ -58,7 +60,7 @@ def create_disk_or_washer(x_pos, f1_val, f2_val=None, method='washer', num_point
         # Create two separate disks with different colors
         # First function disk (blue)
         r1 = np.abs(f1_val)
-        create_single_disk(x_left, x_right, r1, theta, color=(0, 0, 1), opacity=0.3)
+        create_single_disk(x_left, x_right, r1, theta, color=volume_color, opacity=1.0)
         
         # Second function disk (red)
         r2 = np.abs(f2_val)
@@ -71,16 +73,16 @@ def create_disk_or_washer(x_pos, f1_val, f2_val=None, method='washer', num_point
             # Keep disks on same plane
             x_left_2 = x_left
             x_right_2 = x_right
-        create_single_disk(x_left_2, x_right_2, r2, theta, color=(1, 0, 0), opacity=0.3)
+        create_single_disk(x_left_2, x_right_2, r2, theta, color=volume_color, opacity=1.0)
         
     elif method == 'disk':
         r = np.abs(f1_val)
-        create_single_disk(x_left, x_right, r, theta, color=(0.7, 0.7, 0), opacity=0.3)
+        create_single_disk(x_left, x_right, r, theta, color=volume_color, opacity=1.0)
     
     else:  # washer
         # Create washer (two concentric circles)
-        r_outer = np.abs(f1_val)
-        r_inner = np.abs(f2_val) if f2_val is not None else 0
+        r_outer = max(np.abs(f1_val), np.abs(f2_val))
+        r_inner = min(np.abs(f1_val), np.abs(f2_val))
         
         # Create circular edges
         for x in [x_left, x_right]:
@@ -88,12 +90,12 @@ def create_disk_or_washer(x_pos, f1_val, f2_val=None, method='washer', num_point
             x_circle = x * np.ones_like(theta)
             y_outer = r_outer * np.cos(theta)
             z_outer = r_outer * np.sin(theta)
-            mlab.plot3d(x_circle, y_outer, z_outer, color=(0.7, 0.7, 0), tube_radius=0.01, opacity=0.7)
+            mlab.plot3d(x_circle, y_outer, z_outer, color=volume_color, tube_radius=0.01, opacity=1.0)
             
             # Inner circle
             y_inner = r_inner * np.cos(theta)
             z_inner = r_inner * np.sin(theta)
-            mlab.plot3d(x_circle, y_inner, z_inner, color=(0.7, 0.7, 0), tube_radius=0.01, opacity=0.7)
+            mlab.plot3d(x_circle, y_inner, z_inner, color=volume_color, tube_radius=0.01, opacity=1.0)
         
         # Fill washer with triangular mesh (both faces and sides)
         # Front and back faces
@@ -103,18 +105,18 @@ def create_disk_or_washer(x_pos, f1_val, f2_val=None, method='washer', num_point
             x_mesh = x * np.ones_like(theta_mesh)
             y_mesh = r_mesh * np.cos(theta_mesh)
             z_mesh = r_mesh * np.sin(theta_mesh)
-            mlab.mesh(x_mesh, y_mesh, z_mesh, color=(0.7, 0.7, 0), opacity=0.3)
+            washer = mlab.mesh(x_mesh, y_mesh, z_mesh, color=volume_color, opacity=1.0)
         
         # Outer side surface
         theta_mesh, x_mesh = np.meshgrid(np.linspace(0, 2*np.pi, 20), [x_left, x_right])
         y_mesh = r_outer * np.cos(theta_mesh)
         z_mesh = r_outer * np.sin(theta_mesh)
-        mlab.mesh(x_mesh, y_mesh, z_mesh, color=(0.7, 0.7, 0), opacity=0.3)
+        outer = mlab.mesh(x_mesh, y_mesh, z_mesh, color=volume_color, opacity=1.0)
         
         # Inner side surface
         y_mesh = r_inner * np.cos(theta_mesh)
         z_mesh = r_inner * np.sin(theta_mesh)
-        mlab.mesh(x_mesh, y_mesh, z_mesh, color=(0.7, 0.7, 0), opacity=0.3)
+        inner = mlab.mesh(x_mesh, y_mesh, z_mesh, color=volume_color, opacity=1.0)
 
 def create_single_disk(x_left, x_right, radius, theta, color, opacity):
     """Helper function to create a single disk"""
@@ -123,7 +125,7 @@ def create_single_disk(x_left, x_right, radius, theta, color, opacity):
         x_circle = x * np.ones_like(theta)
         y_circle = radius * np.cos(theta)
         z_circle = radius * np.sin(theta)
-        mlab.plot3d(x_circle, y_circle, z_circle, color=color, tube_radius=0.01, opacity=opacity+0.4)
+        mlab.plot3d(x_circle, y_circle, z_circle, color=color, tube_radius=0.01, opacity=opacity)
     
     # Fill disk with triangular mesh (both faces and side)
     # Front and back faces
@@ -132,7 +134,7 @@ def create_single_disk(x_left, x_right, radius, theta, color, opacity):
         x_mesh = x * np.ones_like(theta_mesh)
         y_mesh = r_mesh * np.cos(theta_mesh)
         z_mesh = r_mesh * np.sin(theta_mesh)
-        mlab.mesh(x_mesh, y_mesh, z_mesh, color=color, opacity=opacity)
+        disk = mlab.mesh(x_mesh, y_mesh, z_mesh, color=color, opacity=opacity)
     
     # Side surface
     theta_mesh, x_mesh = np.meshgrid(np.linspace(0, 2*np.pi, 20), [x_left, x_right])
@@ -253,10 +255,14 @@ def plot_single_function(f, x_range, show_disk_pos, color, name, x_offset=0, glo
             mlab.plot3d([x_offset - 0.1, x_offset], [0, 0], [z, z], color=(0, 0, 1), tube_radius=0.005)
     
     # Plot the volume surface
-    mlab.mesh(X + x_offset, Y, Z, color=color, opacity=0.4)
+    volume = mlab.mesh(X + x_offset, Y, Z, color=color, opacity=0.4)
     
     # Plot intersection with x/y plane
-    mlab.plot3d(x_plot + x_offset, y_plot, np.zeros_like(x_plot), color=color, tube_radius=0.04, line_width=2)
+    # Use the same x,y coordinates as the volume surface to show true intersection
+    X_intersection = X + x_offset
+    Y_intersection = Y
+    Z_intersection = np.zeros_like(X)  # Set z=0 for intersection plane
+    mlab.mesh(X_intersection, Y_intersection, Z_intersection, color=color, opacity=0.3)
     
     # Plot base curve
     mlab.plot3d(x_plot + x_offset, y_plot, np.zeros_like(x_plot), color=color, tube_radius=0.04, line_width=2)
@@ -264,7 +270,7 @@ def plot_single_function(f, x_range, show_disk_pos, color, name, x_offset=0, glo
     # Show disk if position specified
     if show_disk_pos is not None:
         y_val = f(show_disk_pos)
-        create_disk_or_washer(show_disk_pos + x_offset, y_val, 0, method='disk', thickness=0.4, offset_disks=False)
+        create_disk_or_washer(show_disk_pos + x_offset, y_val, 0, method='disk', thickness=0.4, offset_disks=False, volume_color=color)
     
     # Add grid planes
     grid_color = (0.2, 0.2, 0.2)
@@ -297,6 +303,13 @@ def plot_volumetric_figure(method='washer', show_disk_pos=None, offset_disks=Fal
     y1_plot = f1(x_plot)
     y2_plot = f2(x_plot)
     
+    # Determine which function is greater at each point
+    greater_mask = y2_plot > y1_plot
+    
+    # Create arrays for the greater and lesser functions
+    y_greater = np.where(greater_mask, y2_plot, y1_plot)
+    y_lesser = np.where(greater_mask, y1_plot, y2_plot)
+    
     # Calculate axis ranges
     y_min = min(min(y1_plot), min(y2_plot))
     y_max = max(max(y1_plot), max(y2_plot))
@@ -310,10 +323,17 @@ def plot_volumetric_figure(method='washer', show_disk_pos=None, offset_disks=Fal
     
     # Create points for the volume surface
     x_fill = np.linspace(x1, x2, 100)
-    y1_fill = f1(x_fill)
-    y2_fill = f2(x_fill)
+    y1_fill = f1(x_fill)  # x^2
+    y2_fill = f2(x_fill)  # 2x + 1
     
-    # Create rotation points
+    # For washer method around x-axis, we want where f2 > f1
+    greater_mask = y2_fill > y1_fill
+    
+    # Create arrays for outer and inner functions
+    y_outer = y2_fill  # f2 is always outer for washer method
+    y_inner = y1_fill  # f1 is always inner for washer method
+    
+    # Create rotation points using the original functions for the basic shape
     X, Y1, Z1, Y2, Z2 = create_rotation_points(x_fill, y1_fill, y2_fill)
     
     # Create axes
@@ -347,101 +367,152 @@ def plot_volumetric_figure(method='washer', show_disk_pos=None, offset_disks=Fal
             mlab.text3d(x_offset - 0.3, 0, z, f'{int(z)}', color=(0, 0, 1), scale=0.2)
     
     # Set volume color
-    volume_color = (0.7, 0.7, 0)  # Yellow-gold color
+    volume_color = (0, 0.7, 0)  # Green color
     
     # For the bounded region, use the difference between the two functions
     if method == 'washer':
-        # Calculate where f2 > f1
-        mask = y2_fill > y1_fill
+        # Find where f2 > f1 for the volume
+        mask = y_outer > y_inner
+        x_masked = x_fill[mask]
+        y_outer_masked = y_outer[mask]  # f2 values (outer radius)
+        y_inner_masked = y_inner[mask]  # f1 values (inner radius)
         
-        if np.any(mask):
-            # Get x values and function values only where f2 > f1
-            x_masked = x_fill[mask]
-            y1_masked = y1_fill[mask]
-            y2_masked = y2_fill[mask]
+        # Create points for both front and back halves
+        theta_back = np.linspace(np.pi, 2*np.pi, 20)  # Back half (π to 2π)
+        theta_front = np.linspace(0, np.pi, 20)  # Front half (0 to π)
+        theta_slice1 = np.linspace(0, 0.1, 10)       # First thin slice near θ=0
+        theta_slice2 = np.linspace(3.04, 3.14, 10)   # Second thin slice near θ=π
+        
+        # Create meshgrids for both slices
+        r_points = np.linspace(0, 1, 10)  # Radial points from 0 to 1
+        theta_r1, r_r1 = np.meshgrid(theta_slice1, r_points)
+        theta_r2, r_r2 = np.meshgrid(theta_slice2, r_points)
+        
+        # Plot both thin slices
+        dark_color = tuple(c * 0.5 for c in volume_color)  # 50% darker
+        
+        # Plot first slice (θ=0 to 0.1)
+        for i in range(len(x_masked)):
+            x = x_masked[i]
+            r_outer = y_outer_masked[i]
+            r_inner = y_inner_masked[i]
             
-            # Create points for the surface - only back half for visibility
-            theta = np.linspace(np.pi, 2*np.pi, 25)  # Half the points for back half rotation
+            # Scale the radial points between inner and outer radius
+            r_scaled = r_inner + r_r1 * (r_outer - r_inner)
             
-            # Create meshgrids for outer surface (f2)
-            X_outer, Theta_outer = np.meshgrid(x_masked, theta)
-            Y_outer = np.outer(np.cos(theta), y2_masked)
-            Z_outer = np.outer(np.sin(theta), y2_masked)
+            # Convert to Cartesian coordinates
+            x_slice = x * np.ones_like(theta_r1)
+            y_slice = r_scaled * np.cos(theta_r1)
+            z_slice = r_scaled * np.sin(theta_r1)
             
-            # Create meshgrids for inner surface (f1)
-            X_inner, Theta_inner = np.meshgrid(x_masked, theta)
-            Y_inner = np.outer(np.cos(theta), y1_masked)
-            Z_inner = np.outer(np.sin(theta), y1_masked)
+            # Plot the solid slice
+            mlab.mesh(x_slice + x_offset, y_slice, z_slice, color=dark_color, opacity=1.0)
+        
+        # Plot second slice (θ=3.04 to π)
+        for i in range(len(x_masked)):
+            x = x_masked[i]
+            r_outer = y_outer_masked[i]
+            r_inner = y_inner_masked[i]
             
-            # Plot the outer and inner surfaces
-            mlab.mesh(X_outer + x_offset, Y_outer, Z_outer, color=volume_color, opacity=0.7)
-            mlab.mesh(X_inner + x_offset, Y_inner, Z_inner, color=volume_color, opacity=0.7)
+            # Scale the radial points between inner and outer radius
+            r_scaled = r_inner + r_r2 * (r_outer - r_inner)
             
-            # Create end caps at the start and end x positions
-            for x in [x_masked[0], x_masked[-1]]:
-                # Get the y values at this x position
-                idx = np.where(x_masked == x)[0][0]
-                r_outer = y2_masked[idx]
-                r_inner = y1_masked[idx]
-                
-                # Create circular end cap
-                theta_cap = np.linspace(0, 2*np.pi, 50)
-                r_points = np.linspace(r_inner, r_outer, 10)
-                theta_mesh, r_mesh = np.meshgrid(theta_cap, r_points)
-                
-                x_mesh = x * np.ones_like(theta_mesh)
-                y_mesh = r_mesh * np.cos(theta_mesh)
-                z_mesh = r_mesh * np.sin(theta_mesh)
-                
-                mlab.mesh(x_mesh + x_offset, y_mesh, z_mesh, color=volume_color, opacity=0.7)
+            # Convert to Cartesian coordinates
+            x_slice = x * np.ones_like(theta_r2)
+            y_slice = r_scaled * np.cos(theta_r2)
+            z_slice = r_scaled * np.sin(theta_r2)
             
-            # Add darker region at intersection with x/y plane
-            # Create filled cross-section
-            theta_cross = np.linspace(0, 2*np.pi, 50)
-            x_cross = np.repeat(x_masked[:, np.newaxis], len(theta_cross), axis=1)
-            r_outer_cross = np.abs(y2_masked[:, np.newaxis]) * np.ones_like(theta_cross)
-            r_inner_cross = np.abs(y1_masked[:, np.newaxis]) * np.ones_like(theta_cross)
+            # Plot the solid slice
+            mlab.mesh(x_slice + x_offset, y_slice, z_slice, color=dark_color, opacity=1.0)
+        
+        # Plot back half (more solid)
+        X_outer_back, _ = np.meshgrid(x_masked, theta_back)
+        Y_outer_back = np.outer(np.cos(theta_back), y_outer_masked)
+        Z_outer_back = np.outer(np.sin(theta_back), y_outer_masked)
+        vol_back_outer = mlab.mesh(X_outer_back + x_offset, Y_outer_back, Z_outer_back, color=volume_color, opacity=0.85)
+        
+        X_inner_back, _ = np.meshgrid(x_masked, theta_back)
+        Y_inner_back = np.outer(np.cos(theta_back), y_inner_masked)
+        Z_inner_back = np.outer(np.sin(theta_back), y_inner_masked)
+        vol_back_inner = mlab.mesh(X_inner_back + x_offset, Y_inner_back, Z_inner_back, color=volume_color, opacity=0.85)
+        
+        # Plot front half (very transparent)
+        X_outer_front, _ = np.meshgrid(x_masked, theta_front)
+        Y_outer_front = np.outer(np.cos(theta_front), y_outer_masked)
+        Z_outer_front = np.outer(np.sin(theta_front), y_outer_masked)
+        vol_front_outer = mlab.mesh(X_outer_front + x_offset, Y_outer_front, Z_outer_front, color=volume_color, opacity=0.08)
+        
+        X_inner_front, _ = np.meshgrid(x_masked, theta_front)
+        Y_inner_front = np.outer(np.cos(theta_front), y_inner_masked)
+        Z_inner_front = np.outer(np.sin(theta_front), y_inner_masked)
+        vol_front_inner = mlab.mesh(X_inner_front + x_offset, Y_inner_front, Z_inner_front, color=volume_color, opacity=0.08)
+        
+        # Create end caps at the start and end x positions
+        for x in [x_masked[0], x_masked[-1]]:
+            # Get the y values at this x position
+            idx = np.where(x_masked == x)[0][0]
+            r_outer = y_outer_masked[idx]  # f2 value (outer radius)
+            r_inner = y_inner_masked[idx]  # f1 value (inner radius)
             
-            # Create points for outer and inner boundaries
-            y_outer_cross = r_outer_cross * np.cos(theta_cross)
-            y_inner_cross = r_inner_cross * np.cos(theta_cross)
-            z_cross = np.zeros_like(x_cross)
+            # Create circular end cap
+            theta_cap = np.linspace(0, 2*np.pi, 50)
+            r_points = np.linspace(r_inner, r_outer, 10)
+            theta_mesh, r_mesh = np.meshgrid(theta_cap, r_points)
             
-            # Plot filled cross-sections
-            mlab.mesh(x_cross + x_offset, y_outer_cross, z_cross, color=volume_color, opacity=0.8)
-            mlab.mesh(x_cross + x_offset, y_inner_cross, z_cross, color=volume_color, opacity=0.8)
+            x_mesh = x * np.ones_like(theta_mesh)
+            y_mesh = r_mesh * np.cos(theta_mesh)
+            z_mesh = r_mesh * np.sin(theta_mesh)
+            
+            # Plot solid end cap
+            cap = mlab.mesh(x_mesh + x_offset, y_mesh, z_mesh, color=volume_color, opacity=1.0)
     
     else:
-        mlab.mesh(X + x_offset, Y1, Z1, color=volume_color, opacity=0.4)
-        mlab.mesh(X + x_offset, Y2, Z2, color=volume_color, opacity=0.4)
+        vol1 = mlab.mesh(X + x_offset, Y1, Z1, color=volume_color, opacity=0.4)
+        
+        vol2 = mlab.mesh(X + x_offset, Y2, Z2, color=volume_color, opacity=0.4)
     
     # Plot the base curves in their original colors with doubled thickness
     mlab.plot3d(x_plot + x_offset, y1_plot, np.zeros_like(x_plot), color=(0, 0, 1), tube_radius=base_curve_radius, line_width=4)
     mlab.plot3d(x_plot + x_offset, y2_plot, np.zeros_like(x_plot), color=(1, 0, 0), tube_radius=base_curve_radius, line_width=4)
+
+    # Create the volume
+    if True:
+        # Create arrays for theta values
+        theta_back = np.linspace(np.pi, 2*np.pi, 20)  # Back half (π to 2π)
+        theta_front = np.linspace(0, np.pi, 20)  # Front half (0 to π)
+        X_outer_back, _ = np.meshgrid(x_fill, theta_back)
+        Y_outer_back = np.outer(np.cos(theta_back), y1_fill)
+        Z_outer_back = np.outer(np.sin(theta_back), y1_fill)
+        vol_back_outer = mlab.mesh(X_outer_back + x_offset, Y_outer_back, Z_outer_back, color=volume_color, opacity=0.85)
+        
+        X_inner_back, _ = np.meshgrid(x_fill, theta_back)
+        Y_inner_back = np.outer(np.cos(theta_back), y2_fill)
+        Z_inner_back = np.outer(np.sin(theta_back), y2_fill)
+        vol_back_inner = mlab.mesh(X_inner_back + x_offset, Y_inner_back, Z_inner_back, color=volume_color, opacity=0.85)
+        
+        X_outer_front, _ = np.meshgrid(x_fill, theta_front)
+        Y_outer_front = np.outer(np.cos(theta_front), y1_fill)
+        Z_outer_front = np.outer(np.sin(theta_front), y1_fill)
+        vol_front_outer = mlab.mesh(X_outer_front + x_offset, Y_outer_front, Z_outer_front, color=volume_color, opacity=0.08)
+        
+        X_inner_front, _ = np.meshgrid(x_fill, theta_front)
+        Y_inner_front = np.outer(np.cos(theta_front), y2_fill)
+        Z_inner_front = np.outer(np.sin(theta_front), y2_fill)
+        vol_front_inner = mlab.mesh(X_inner_front + x_offset, Y_inner_front, Z_inner_front, color=volume_color, opacity=0.08)
     
-    # Add rotated curves every 15 degrees
-    if method == 'washer':
-        angles = np.arange(15, 360, angle_interval)  # Every 15 degrees
-        for angle in angles:
-            theta = np.radians(angle)
-            # Rotate f1
-            y_rot = y1_plot * np.cos(theta)
-            z_rot = y1_plot * np.sin(theta)
-            mlab.plot3d(x_plot + x_offset, y_rot, z_rot, color=(0, 0, 1), tube_radius=base_curve_radius/4, line_width=1)
-            
-            # Rotate f2
-            y_rot = y2_plot * np.cos(theta)
-            z_rot = y2_plot * np.sin(theta)
-            mlab.plot3d(x_plot + x_offset, y_rot, z_rot, color=(1, 0, 0), tube_radius=base_curve_radius/4, line_width=1)
+    # Remove built-in axes and create custom axes for the third plot
+    if x_offset > 0:  # This is the third plot
+        # Create axes without z labels
+        mlab.orientation_axes()  # This will create minimal axes without labels
     
     # Show disk/washer if position is specified
     if show_disk_pos is not None:
         y1_val = f1(show_disk_pos)
         y2_val = f2(show_disk_pos)
         if method == 'washer':
-            create_disk_or_washer(show_disk_pos + x_offset, y1_val, y2_val, method=method, thickness=0.4, offset_disks=offset_disks)
+            create_disk_or_washer(show_disk_pos + x_offset, y1_val, y2_val, method=method, thickness=0.4, offset_disks=offset_disks, volume_color=volume_color)
         else:
-            create_disk_or_washer(show_disk_pos + x_offset, y1_val, 0, method='disk', thickness=0.4, offset_disks=offset_disks)
+            create_disk_or_washer(show_disk_pos + x_offset, y1_val, 0, method='disk', thickness=0.4, offset_disks=offset_disks, volume_color=volume_color)
     
     # Add grid planes
     grid_color = (0.2, 0.2, 0.2)
@@ -454,7 +525,7 @@ def plot_volumetric_figures():
     # Find intersection points
     x1, x2 = find_intersection()
     x_range = x2 - x1
-    x_extension = x_range * 0.35  # Increased from 0.25 to 0.35 (10% more)
+    x_extension = x_range * 0.35
     plot_x_range = (x1 - x_extension, x2 + x_extension)
     
     # Calculate global ranges for consistent axes
@@ -462,36 +533,62 @@ def plot_volumetric_figures():
     
     # Calculate offset based on x range
     plot_width = plot_x_range[1] - plot_x_range[0]
-    offset = plot_width * 4.0  # Increased from 3.0 to 4.0 for more spacing
+    offset = plot_width * 4.0
     
     # Create a single figure with white background
     fig = mlab.figure(bgcolor=(1, 1, 1), size=(1800, 800))
     
-    # Determine function order based on maximum values
-    x_test = np.linspace(plot_x_range[0], plot_x_range[1], 100)
-    f1_max = max(f1(x_test))
-    f2_max = max(f2(x_test))
+    # Determine which function is higher based on area
+    higher_f, lower_f, higher_color, lower_color = determine_higher_function(f1, f2, plot_x_range, criteria='area')
     
-    # First function should be the one with higher values
-    if f1_max > f2_max:
-        first_func, second_func = f1, f2
-        first_color, second_color = (0, 0, 1), (1, 0, 0)
-        first_name, second_name = 'f1', 'f2'
-    else:
-        first_func, second_func = f2, f1
-        first_color, second_color = (1, 0, 0), (0, 0, 1)
-        first_name, second_name = 'f2', 'f1'
+    # Plot higher function first (leftmost)
+    plot_single_function(higher_f, plot_x_range, 1.5, higher_color, 'y1', x_offset=-offset, global_ranges=global_ranges)
     
-    # Plot functions in determined order with global ranges
-    plot_single_function(first_func, plot_x_range, 1.5, first_color, first_name, x_offset=-offset, global_ranges=global_ranges)
-    plot_single_function(second_func, plot_x_range, 1.5, second_color, second_name, x_offset=0, global_ranges=global_ranges)
+    # Plot lower function second (middle)
+    plot_single_function(lower_f, plot_x_range, 1.5, lower_color, 'y2', x_offset=0, global_ranges=global_ranges)
     
     # Plot combined volume (rightmost)
-    plot_volumetric_figure(method='washer', show_disk_pos=1.5, offset_disks=False, show_curves=True, x_offset=offset)
+    plot_volumetric_figure(method='washer', show_disk_pos=1.5, offset_disks=False, show_curves=False, x_offset=offset)
     
     # Set initial view to match the image
     mlab.view(azimuth=45, elevation=45, distance='auto', roll=0)
     mlab.show()
+
+def determine_higher_function(f1, f2, x_range, criteria='area'):
+    """
+    Determine which function is higher based on different criteria
+    Args:
+        f1, f2: The two functions to compare
+        x_range: (x_min, x_max) tuple for analysis
+        criteria: 'area' (total area), 'max_y' (maximum y value), 
+                 'avg_y' (average y value), or 'x_point' (value at specific x)
+    Returns:
+        (higher_f, lower_f, higher_color, lower_color): Tuple containing the ordered functions and their colors
+    """
+    x = np.linspace(x_range[0], x_range[1], 1000)
+    y1 = f1(x)
+    y2 = f2(x)
+    
+    if criteria == 'area':
+        # Compare total area under each curve
+        area1 = np.trapezoid(np.abs(y1), x)
+        area2 = np.trapezoid(np.abs(y2), x)
+        is_f1_higher = area1 > area2
+    elif criteria == 'max_y':
+        # Compare maximum y values
+        is_f1_higher = np.max(np.abs(y1)) > np.max(np.abs(y2))
+    elif criteria == 'avg_y':
+        # Compare average y values
+        is_f1_higher = np.mean(np.abs(y1)) > np.mean(np.abs(y2))
+    else:  # 'x_point'
+        # Compare values at the midpoint
+        mid_x = (x_range[0] + x_range[1]) / 2
+        is_f1_higher = abs(f1(mid_x)) > abs(f2(mid_x))
+    
+    if is_f1_higher:
+        return f1, f2, (0, 0, 1), (1, 0, 0)  # f1 higher (blue), f2 lower (red)
+    else:
+        return f2, f1, (1, 0, 0), (0, 0, 1)  # f2 higher (red), f1 lower (blue)
 
 if __name__ == '__main__':
     plot_volumetric_figures()
