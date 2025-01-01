@@ -48,3 +48,23 @@ python volumetric_plots_mayavi.py
 - Left mouse button: Rotate view
 - Middle mouse button: Zoom
 - Right mouse button: Pan
+
+## Coordinate System Transformations
+
+The application implements three key coordinate system transformations:
+
+1. **Multiple Coordinate Systems in Single Scene**: 
+   - Creates three separate coordinate systems within one Mayavi scene
+   - Uses fixed offsets (`PLOT_SPACING`) to position each plot
+   - Enables simultaneous visualization of disk method for both functions and washer method
+
+2. **Normalization Transformation**:
+   - Normalizes all three plots to fit within a consistent region
+   - Uses scale factors based on `NORM_SCALE` constant
+   - Maintains consistent proportions and spacing regardless of function values
+   - Ensures proper visual comparison between different methods
+
+3. **Zoom Transformation**:
+   - Applies a linear transformation when zoom is enabled
+   - Makes x and y ranges visually equal for detailed examination
+   - Maintains proper proportions while providing enhanced view of intersection region
